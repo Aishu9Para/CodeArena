@@ -1,0 +1,18 @@
+{
+  "name": "codearena",
+  "version": "1.0.0",
+  "description": "CodeArena - Full Stack Coding Contest Platform",
+  "private": true,
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "db:generate": "cd server && npm run db:generate",
+    "db:push": "cd server && npm run db:push",
+    "db:migrate": "cd server && npm run db:migrate",
+    "db:seed": "cd server && npm run db:seed",
+    "db:studio": "cd server && npm run db:studio"
+  }
+}
