@@ -1,0 +1,349 @@
+// CodeArena Prisma Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  ORGANIZER
+  ADMIN
+}
+
+enum ContestStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  UPCOMING
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+enum ContestVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum SubmissionStatus {
+  PENDING
+  ACCEPTED
+  WRONG_ANSWER
+  TIME_LIMIT_EXCEEDED
+  COMPILATION_ERROR
+  RUNTIME_ERROR
+  PARTIAL
+}
+
+enum NotificationType {
+  CONTEST_STARTED
+  CONTEST_ENDING_SOON
+  CONTEST_REGISTERED
+  ANNOUNCEMENT
+  CERTIFICATE_READY
+  SUBMISSION_RESULT
+  ROLE_CHANGED
+  CONTEST_APPROVED
+  CONTEST_REJECTED
+  SYSTEM
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  PRESENT
+  COMPLETED
+  DISQUALIFIED
+}
+
+enum ReportType {
+  USER
+  PROBLEM
+  CONTEST
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(STUDENT)
+  college   String?
+  isBlocked Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile       Profile?
+  contests      Contest[]       @relation("OrganizerContests")
+  registrations Registration[]
+  submissions   Submission[]
+  notifications Notification[]
+  certificates  Certificate[]
+  announcements Announcement[]
+  reports       Report[]        @relation("ReportedBy")
+  reportedIn    Report[]        @relation("ReportedUser")
+
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+
+  @@map("users")
+}
+
+// ─── Profiles ─────────────────────────────────────────────────────────────────
+
+model Profile {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  avatarUrl      String?
+  bio            String?
+  github         String?
+  linkedin       String?
+  website        String?
+  totalSolved    Int     @default(0)
+  totalContests  Int     @default(0)
+  totalCerts     Int     @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// ─── Contests ─────────────────────────────────────────────────────────────────
+
+model Contest {
+  id                   String            @id @default(cuid())
+  title                String
+  description          String
+  rules                String?
+  bannerUrl            String?
+  prize                String?
+  organizerId          String
+  status               ContestStatus     @default(DRAFT)
+  visibility           ContestVisibility @default(PUBLIC)
+  accessPassword       String?
+  startTime            DateTime
+  endTime              DateTime
+  duration             Int               // in minutes
+  registrationDeadline DateTime
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  organizer     User               @relation("OrganizerContests", fields: [organizerId], references: [id])
+  problems      ContestProblem[]
+  registrations Registration[]
+  submissions   Submission[]
+  announcements Announcement[]
+  certificates  Certificate[]
+  reports       Report[]
+
+  @@map("contests")
+}
+
+// ─── Problems ─────────────────────────────────────────────────────────────────
+
+model Problem {
+  id            String     @id @default(cuid())
+  title         String
+  description   String
+  inputFormat   String?
+  outputFormat  String?
+  constraints   String?
+  explanation   String?
+  difficulty    Difficulty @default(MEDIUM)
+  tags          String[]
+  maxScore      Int        @default(100)
+  timeLimit     Int        @default(2)   // seconds
+  memoryLimit   Int        @default(256) // MB
+  creatorId     String
+  isPublic      Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  examples      Example[]
+  testCases     TestCase[]
+  contests      ContestProblem[]
+  submissions   Submission[]
+  reports       Report[]
+
+  @@map("problems")
+}
+
+model Example {
+  id          String  @id @default(cuid())
+  problemId   String
+  input       String
+  output      String
+  explanation String?
+  orderIndex  Int     @default(0)
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@map("examples")
+}
+
+model TestCase {
+  id         String  @id @default(cuid())
+  problemId  String
+  input      String
+  output     String
+  isHidden   Boolean @default(false)
+  points     Int     @default(10)
+  orderIndex Int     @default(0)
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@map("test_cases")
+}
+
+// ─── Contest Problems ─────────────────────────────────────────────────────────
+
+model ContestProblem {
+  id         String @id @default(cuid())
+  contestId  String
+  problemId  String
+  orderIndex Int    @default(0)
+  maxScore   Int    @default(100)
+
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  problem Problem @relation(fields: [problemId], references: [id])
+
+  @@unique([contestId, problemId])
+  @@map("contest_problems")
+}
+
+// ─── Registrations ────────────────────────────────────────────────────────────
+
+model Registration {
+  id         String             @id @default(cuid())
+  userId     String
+  contestId  String
+  status     RegistrationStatus @default(REGISTERED)
+  registeredAt DateTime         @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contestId])
+  @@map("registrations")
+}
+
+// ─── Submissions ──────────────────────────────────────────────────────────────
+
+model Submission {
+  id          String           @id @default(cuid())
+  userId      String
+  problemId   String
+  contestId   String?
+  language    String
+  code        String?
+  fileUrl     String?
+  status      SubmissionStatus @default(PENDING)
+  score       Int              @default(0)
+  penalty     Int              @default(0)
+  timeTaken   Float?           // ms
+  memoryUsed  Float?           // MB
+  errorMsg    String?
+  submittedAt DateTime         @default(now())
+
+  user    User     @relation(fields: [userId], references: [id])
+  problem Problem  @relation(fields: [problemId], references: [id])
+  contest Contest? @relation(fields: [contestId], references: [id])
+
+  @@map("submissions")
+}
+
+// ─── Announcements ────────────────────────────────────────────────────────────
+
+model Announcement {
+  id        String   @id @default(cuid())
+  contestId String
+  authorId  String
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@map("announcements")
+}
+
+// ─── Certificates ─────────────────────────────────────────────────────────────
+
+model Certificate {
+  id          String   @id @default(cuid())
+  userId      String
+  contestId   String
+  rank        Int?
+  score       Int?
+  certificateUrl String?
+  issuedAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  contest Contest @relation(fields: [contestId], references: [id])
+
+  @@unique([userId, contestId])
+  @@map("certificates")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ─── Reports ─────────────────────────────────────────────────────────────────
+
+model Report {
+  id           String       @id @default(cuid())
+  reportedById String
+  type         ReportType
+  status       ReportStatus @default(OPEN)
+  reason       String
+  contestId    String?
+  problemId    String?
+  reportedUserId String?
+  resolvedNote String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  reportedBy   User     @relation("ReportedBy", fields: [reportedById], references: [id])
+  reportedUser User?    @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  contest      Contest? @relation(fields: [contestId], references: [id])
+  problem      Problem? @relation(fields: [problemId], references: [id])
+
+  @@map("reports")
+}
